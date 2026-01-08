@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="fa">
+  <head>
+    <meta charset="utf-8" />
+    <title>PDF → Excel</title>
+    <style>
+      body { font-family: -apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Arial; padding: 2rem; }
+      .box { max-width: 640px; margin: auto }
+      progress { width: 100%; height: 20px }
+      .hidden { display: none }
+    </style>
+  </head>
+  <body>
+    <div class="box">
+      <h2>تبدیل PDF به Excel</h2>
+      <input id="file" type="file" accept="application/pdf" />
+      <div style="height: 12px"></div>
+      <button id="upload">آپلود و تبدیل</button>
+      <div style="height: 12px"></div>
+      <progress id="progress" value="0" max="100" class="hidden"></progress>
+      <div id="status"></div>
+    </div>
+
+    <script>
+      const fileInput = document.getElementById('file')
+      const uploadBtn = document.getElementById('upload')
+      const progress = document.getElementById('progress')
+      const status = document.getElementById('status')
+
+      uploadBtn.addEventListener('click', () => {
+        const f = fileInput.files[0]
+        if (!f) { alert('یک فایل PDF انتخاب کنید'); return }
+        if (!f.name.toLowerCase().endsWith('.pdf')) { alert('لطفاً یک PDF انتخاب کنید'); return }
+
+        const xhr = new XMLHttpRequest()
+        xhr.open('POST', '/convert')
+        xhr.responseType = 'blob'
+
+        // disable inputs while working
+        uploadBtn.disabled = true
+        fileInput.disabled = true
+
+        xhr.upload.onprogress = (e) => {
+          if (e.lengthComputable) {
+            progress.classList.remove('hidden')
+            const pct = Math.round((e.loaded / e.total) * 100)
+            progress.value = pct
+            status.innerText = `در حال آپلود: ${pct}%`
+          }
+        }
+
+        xhr.onload = () => {
+          uploadBtn.disabled = false
+          fileInput.disabled = false
+
+          if (xhr.status === 200) {
+            const blob = xhr.response
+            const url = URL.createObjectURL(blob)
+            const a = document.createElement('a')
+            a.href = url
+            a.download = f.name.replace(/\.pdf$/i, '.xlsx')
+            document.body.appendChild(a)
+            a.click()
+            a.remove()
+            URL.revokeObjectURL(url)
+            status.innerText = 'تبدیل کامل شد — فایل دانلود شد ✅'
+            progress.value = 100
+          } else if (xhr.status === 413) {
+            status.innerText = 'حجم فایل بیش از حد مجاز است (باید کمتر از 100MB باشد)'
+          } else {
+            // try to show server-provided message
+            const reader = new FileReader()
+            reader.onload = () => {
+              const text = reader.result
+              status.innerText = `خطا: ${xhr.status} — ${text}`
+            }
+            reader.onerror = () => { status.innerText = 'خطا در دریافت پیام سرور' }
+            if (xhr.response) reader.readAsText(xhr.response)
+            else status.innerText = `خطا: ${xhr.status} - ${xhr.statusText}`
+          }
+          progress.classList.add('hidden')
+        }
+
+        xhr.onerror = () => { uploadBtn.disabled = false; fileInput.disabled = false; status.innerText = 'خطای شبکه یا سرور'; progress.classList.add('hidden') }
+
+        const fd = new FormData()
+        fd.append('file', f)
+        xhr.send(fd)
+        status.innerText = 'در حال ارسال...'
+      })
+    </script>
+  </body>
+</html>
